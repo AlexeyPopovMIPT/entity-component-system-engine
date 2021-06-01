@@ -13,7 +13,7 @@ class IEvent
 
 public:
 
-    entity_id_t _entityId;
+    id_t _eventTypeId;
 
     IEvent ()
     {}
@@ -32,14 +32,16 @@ public:
     static const id_t EVENT_TYPE_ID;
 
     Event()
-    {}
+    {
+        _eventTypeId = EVENT_TYPE_ID;
+    }
 
     virtual ~Event()
     {}
 
 };
 template <typename EventName>
-id_t const Event<EventName>::EVENT_TYPE_ID = IDManager.GetUniqueID<IEvent>();
+id_t const Event<EventName>::EVENT_TYPE_ID = eventIdManager.GetUniqueID();
 
 
 class IEventListener
@@ -48,6 +50,13 @@ class IEventListener
 public:
 
     std::vector<id_t> _raisedEvents;
+
+    ~IEventListener()
+    {
+        _LOG("Deleting IEventListener [%p]\n", this);
+        if (_raisedEvents.size() > 0)
+            _LOG("ACHTUNG: %d event(s) haven't been handled\n", _raisedEvents.size());
+    }
 
 };
 //TODO: void* -> interface*, виртуальные деструкторы для корректности удаления объектов, виртуальные другие функции
@@ -59,11 +68,16 @@ class EventManager
 
 public:
 
-    EventManager()
+    EventManager():
+        _eventListenersByTypes (nullptr)
     {
         MakeList(&_eventPointers, "EventManager");
-        _eventListenersByTypes = new std::vector<IEventListener*> [IDManager.GetLastID<IEvent>() + 1];
-        fprintf(LOG, "Allocating %lu bytes at [%p] from %s\n", sizeof(*_eventListenersByTypes) * (IDManager.GetLastID<IEvent>() + 1), _eventListenersByTypes, __PRETTY_FUNCTION__);
+    }
+
+    void Setup()
+    {
+        _eventListenersByTypes = new std::vector<IEventListener*> [eventIdManager.GetLastID() + 1];
+        LOG_LEEKS _LOG("Allocating %lu bytes at [%p] from %s\n", sizeof(*_eventListenersByTypes) * (eventIdManager.GetLastID() + 1), _eventListenersByTypes, __PRETTY_FUNCTION__);
     }
 
     ~EventManager()
@@ -72,15 +86,18 @@ public:
                 iter != prev;
                     prev = iter, iter = GetNext(&_eventPointers, iter))
         {
-                    IEvent* ptr = (IEvent*)GetByPhInd(&_eventPointers, iter);
-                    fprintf(LOG, "Deleting [%p] from %s\n", ptr, __PRETTY_FUNCTION__);
-                    delete ptr;
+            IEvent* ptr = (IEvent*)GetByPhInd(&_eventPointers, iter);
+            LOG_LEEKS _LOG("Deleting [%p] from %s\n", ptr, __PRETTY_FUNCTION__);
+            delete ptr;
         }
 
 
         ListDistruct(&_eventPointers);
-        fprintf(LOG, "Deleting [%p] from %s\n", _eventListenersByTypes, __PRETTY_FUNCTION__);
-        delete[] _eventListenersByTypes;
+        if (_eventListenersByTypes)
+        {
+            LOG_LEEKS _LOG("Deleting [%p] from %s\n", _eventListenersByTypes, __PRETTY_FUNCTION__);
+            delete[] _eventListenersByTypes;
+        }
     }
 
     IEvent* GetEvent(id_t id)
@@ -97,11 +114,11 @@ public:
     template <typename EventName>
     void Unsubscribe (const IEventListener* eventListener);
 
-    template <typename EventName>
-    id_t SendEvent (entity_id_t entityId, void* args)
+    template <typename EventName, typename... Args>
+    id_t SendEvent (/*entity_id_t entityId, */Args... args)
     {
-        EventName* event = new EventName(args);
-        fprintf(LOG, "Allocating %lu bytes at [%p] from %s\n", sizeof(*event) * 1, event, __PRETTY_FUNCTION__);
+        EventName* event = new EventName(args...);
+        LOG_LEEKS _LOG( "Allocating %lu bytes at [%p] from %s\n", sizeof(*event) * 1, event, __PRETTY_FUNCTION__);
         id_t eventId = AddToEnd(&_eventPointers, event);
 
         event->unhandlingsCount = this->_eventListenersByTypes[Event<EventName>::EVENT_TYPE_ID].size();
@@ -118,13 +135,15 @@ public:
         event->unhandlingsCount--;
         if (event->unhandlingsCount == 0)
         {
-            fprintf(LOG, "Deleting [%p] from %s\n", event, __PRETTY_FUNCTION__);
+            LOG_LEEKS _LOG( "Deleting [%p] from %s\n", event, __PRETTY_FUNCTION__);
             delete event;
             RemoveAtPos(&this->_eventPointers, eventId, nullptr);
         }
     }
 
 };
+
+EventManager eventManager;
 
 #endif // ! __EVENT_H__
 

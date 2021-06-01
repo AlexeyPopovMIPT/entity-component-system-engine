@@ -2,32 +2,33 @@
 #ifndef __ID_MANAGER__
 #define __ID_MANAGER__
 
-struct
-{
-private:
 
-    template <typename T>
-    int* ID ()
-    {
-        static int id = -1;
-        return &id;
-    }
+class IDManager
+{
+    int id;
 
 public:
 
-    template <typename T>
+    IDManager():
+        id(-1)
+    {}
+
     int GetUniqueID ()
     {
-        return ++*(this->ID<T>());
+        return ++id;
     }
 
-    template <typename T>
     int GetLastID ()
     {
-        return *(this->ID<T>());
+        return id;
     }
 
-} IDManager;
+};
+
+IDManager entityIdManager;
+IDManager componentIdManager;
+IDManager systemIdManager;
+IDManager eventIdManager;
 
 #endif // !__ID_MANAGER__
 

@@ -29,7 +29,7 @@ struct Entity : public IEntity
     static entity_t_id_t const ENTITY_TYPE_ID;
     Entity ()
     {}
-    Entity (void* args);
+
     virtual ~Entity()
     {}
 
@@ -40,7 +40,7 @@ struct Entity : public IEntity
 
 };
 template <typename EntityName> 
-entity_t_id_t const Entity<EntityName>::ENTITY_TYPE_ID = IDManager.GetUniqueID<IEntity>();
+entity_t_id_t const Entity<EntityName>::ENTITY_TYPE_ID = entityIdManager.GetUniqueID();
 
 class EntityManager
 {
@@ -65,18 +65,20 @@ public:
                     prev = iter, iter = GetNext(&entityObjectIndexes, iter))
         {
             IEntity* ptr = (IEntity*)GetByPhInd(&entityObjectIndexes, iter);
-            fprintf(LOG, "Deleting [%p] from %s\n", ptr, __PRETTY_FUNCTION__);
+            LOG_LEEKS _LOG( "Deleting [%p] from %s\n", ptr, __PRETTY_FUNCTION__);
             delete ptr;
         }
         ListDistruct(&entityObjectIndexes);
     }
 
-    template <typename EntityName>
-    entity_id_t CreateEntityObject (void* args)
+    template <typename EntityName, typename... Args> //TODO: не передаются ли аргументы по значению, а не по ссылке
+    entity_id_t CreateEntityObject (Args... args)
     {
-        EntityName* entity = new EntityName(args);
-        fprintf(LOG, "Allocating %lu bytes at [%p] from %s\n", sizeof(*entity), entity, __PRETTY_FUNCTION__);
+        EntityName* entity = new EntityName(args...);
+        LOG_LEEKS _LOG( "Allocating %lu bytes at [%p] from %s\n", sizeof(*entity), entity, __PRETTY_FUNCTION__);
+        _LOG("LIST: adding to ");
         entity_id_t Id = AddToEnd(&entityObjectIndexes, entity);
+        _LOG("%d\n", Id);
         return Id;
     }
 
@@ -85,20 +87,24 @@ public:
         return GetByPhInd(&entityObjectIndexes, (size_t)Id);
     }
 
-    template <typename EntityName>
+
     int DestroyEntityObject (entity_id_t Id)
     {
-        EntityName* entity = nullptr;
+        componentManager.RemoveComponentsOf(Id);
+        IEntity* entity = nullptr;
+        _LOG("LIST: removing from %d\n", Id);
         int ret = RemoveAtPos(&entityObjectIndexes, Id, (void**)&entity);
         if (ret >= 0) 
         {
-            fprintf(LOG, "Deleting [%p] from %s\n", entity, __PRETTY_FUNCTION__);
+            LOG_LEEKS _LOG( "Deleting [%p] from %s\n", entity, __PRETTY_FUNCTION__);
             delete entity;
         }
         return ret;
     }
 
 };
+
+EntityManager entityManager; //TODO: namespace
 
 #endif // ! __ENTITY_H__
 

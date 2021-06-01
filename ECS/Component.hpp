@@ -35,17 +35,17 @@ public:
 
 };
 template <typename ComponentName> 
-component_t_id_t const Component<ComponentName>::COMPONENT_TYPE_ID = IDManager.GetUniqueID<IComponent>();
+component_t_id_t const Component<ComponentName>::COMPONENT_TYPE_ID = componentIdManager.GetUniqueID();
 
 
 class ComponentManager
 {
 
-    #define THIS_COMPONENT this->componentObjectPointersByComponent[Component<ComponentName>::COMPONENT_TYPE_ID][entityId]
+    #define THIS_COMPONENT (this->componentObjectPointersByComponent[Component<ComponentName>::COMPONENT_TYPE_ID][entityId])
 
 
-    std::vector<std::vector<void*>>  componentsOfEntities; // Entity ID to component IDs
-    std::vector<std::vector<void*>> componentObjectPointersByComponent; //[componentTypeId][entityObjectId] = pointer to component object of given entity
+    std::vector<std::vector<IComponent*>> componentsOfEntities; // Entity ID to component IDs
+    std::vector<std::vector<IComponent*>> componentObjectPointersByComponent; //[componentTypeId][entityObjectId] = pointer to component object of given entity
     int componentTypesCount;
 
     template <typename T>
@@ -74,12 +74,12 @@ class ComponentManager
 
 public:
 
-    ComponentManager()
+    void Setup()
     {
-        componentTypesCount = IDManager.GetLastID<IComponent>() + 1;
+        componentTypesCount = componentIdManager.GetLastID() + 1;
 
         for (int i = 0; i < componentTypesCount; i++)
-            componentObjectPointersByComponent.push_back(std::vector<void*>());
+            componentObjectPointersByComponent.push_back(std::vector<IComponent*>());
  
     }
 
@@ -88,24 +88,26 @@ public:
         for (int i = 0; i < componentTypesCount; i++)
             for (auto component: componentObjectPointersByComponent[i])
             {
-                fprintf(LOG, "Deleting [%p] from %s\n", component, __PRETTY_FUNCTION__);
-                delete (IComponent*)component;
+                LOG_LEEKS _LOG( "Deleting [%p] from %s\n", component, __PRETTY_FUNCTION__);
+                delete component;
             }
 
     }
 
-    template <typename ComponentName>
-    void                      AddComponent       (entity_id_t entityId, void* args)
+    template <typename ComponentName, typename... Args>
+    ComponentName*             AddComponent       (entity_id_t entityId, Args... args)
     {
-        ComponentName* component = new ComponentName(args);
-        fprintf(LOG, "Allocating %lu bytes at [%p] from %s\n", sizeof(*component), component, __PRETTY_FUNCTION__);
+        ComponentName* component = new ComponentName(entityId, args...);
+        LOG_LEEKS _LOG( "Allocating %lu bytes at [%p] from %s\n", sizeof(*component), component, __PRETTY_FUNCTION__);
 
-        ExpandVector<std::vector<void*>> (this->componentsOfEntities, entityId + 1);
-        this->componentsOfEntities[entityId].push_back(component);
+        ExpandVector<std::vector<IComponent*>> (this->componentsOfEntities, entityId + 1);
+        this->componentsOfEntities[entityId].push_back(dynamic_cast<IComponent*>(component));
 
         int componentTypeId = Component<ComponentName>::COMPONENT_TYPE_ID;
-        ExpandVector_initialised<void*> ((this->componentObjectPointersByComponent)[componentTypeId], entityId + 1, nullptr);
-        this->componentObjectPointersByComponent[Component<ComponentName>::COMPONENT_TYPE_ID][entityId] = component;
+        ExpandVector_initialised<IComponent*> ((this->componentObjectPointersByComponent)[componentTypeId], entityId + 1, nullptr);
+        this->componentObjectPointersByComponent[Component<ComponentName>::COMPONENT_TYPE_ID][entityId] = dynamic_cast<IComponent*>(component);
+
+        return component;
 
     }
 
@@ -114,7 +116,7 @@ public:
     {
         ComponentName* component = THIS_COMPONENT;
         delete component;
-        fprintf(LOG, "Deleting [%p] from %s\n", component, __PRETTY_FUNCTION__);
+        LOG_LEEKS _LOG( "Deleting [%p] from %s\n", component, __PRETTY_FUNCTION__);
         THIS_COMPONENT = nullptr;
         for (int i = 0; i < this->componentsOfEntities[entityId].size(); i++)
             if (this->componentsOfEntities[entityId][i] == component)
@@ -129,19 +131,43 @@ public:
     }
 
     template <typename ComponentName>
-    std::vector<void*> const& GetEntitiesVector() const
+    ComponentName*             GetComponent        (entity_id_t entityId)
+    {
+        if (entityId == -1) return nullptr;
+        return dynamic_cast <ComponentName*> (this->componentObjectPointersByComponent[Component<ComponentName>::COMPONENT_TYPE_ID][entityId]);
+    }
+
+    template <typename ComponentName>
+    std::vector<IComponent*> const& GetEntitiesVector() const
     {
         return this->componentObjectPointersByComponent[Component<ComponentName>::COMPONENT_TYPE_ID];
     }
 
-    std::vector<void*> const& GetComponentsVector (entity_id_t entityId) const
+    std::vector<IComponent*> const& GetComponentsVector (entity_id_t entityId) const
     {
         return this->componentsOfEntities[entityId];
+    }
+
+    void RemoveComponentsOf (entity_id_t entityId)
+    {
+        this->componentsOfEntities[entityId].clear();
+
+        for (int i = 0; i < this->componentObjectPointersByComponent.size(); i++)
+        {
+            if (entityId < this->componentObjectPointersByComponent[i].size() && this->componentObjectPointersByComponent[i][entityId]) 
+            {
+                delete (IComponent*)(this->componentObjectPointersByComponent[i][entityId]);
+                this->componentObjectPointersByComponent[i][entityId] = nullptr; //TODO: сокращать вектор
+                putchar(0);
+            }
+        }
     }
 
 
 
 };
+
+ComponentManager componentManager;
 
 #endif // ! __COMPONENT_H__
 
