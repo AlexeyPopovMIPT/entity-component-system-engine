@@ -15,7 +15,8 @@ void CleanLogFile()
 {
     fclose(fopen("debug.log", "w"));
 }
-#define LOG_LEEKS if(0)
+#define LOG_LEEKS if(1)
+
 #else
 #define _LOG(...) ;
 void CleanLogFile()
@@ -31,7 +32,7 @@ void CleanLogFile()
 
 const int WINDOW_X = 1600;
 const int WINDOW_Y = 900;
-const int LOW_WALL_Y = WINDOW_Y - 200;
+const int LOW_WALL_Y  = WINDOW_Y - 200;
 const int HIGH_WALL_Y = 200;
 const int PLAYER_SPEED = 200; // pics/sec
 const float SHOOTING_SPEED = 3; //per second
@@ -425,6 +426,8 @@ public:
             else if (event->_eventTypeId == Event<GameOver>::EVENT_TYPE_ID)
             {
                 _driveableId = -1;
+                _wasdDown[0] = false; _wasdDown[1] = false; 
+                _wasdDown[2] = false; _wasdDown[3] = false; 
                 _LOG("DrivingSystem: player died catched\n");
             }
 
@@ -625,9 +628,10 @@ public:
     virtual float Update() override
     {
         int size = this->_raisedEvents.size();
-        while (size > 0)
+        id_t eventId = -1;
+        for (; size > 0; eventManager.EventHandled(eventId, *this))
         {
-            id_t eventId = this->_raisedEvents[--size];
+            eventId = this->_raisedEvents[--size];
             this->_raisedEvents.pop_back();
 
             WallCollision* event = dynamic_cast<WallCollision*> (eventManager.GetEvent(eventId)); //TODO: почему не давать в стек сразу указатель?
@@ -639,9 +643,8 @@ public:
             CollideableComponent* collideable = componentManager.GetComponent<CollideableComponent>(entityId);
             BouncingComponent* bouncing       = componentManager.GetComponent<BouncingComponent>(entityId);
 
-            assert(position);
-            assert(collideable);
-            assert(bouncing);
+            if(!(position && collideable && bouncing))
+                continue;                           // because this entity was already destroyed
 
             
             while (true)
@@ -656,7 +659,7 @@ public:
                     {
                         position->setPosition (position->getPosition().x, position->getPosition().y + distanceLowWall * (1 + bouncing->_bouncing));
                         MovingComponent* moving = componentManager.GetComponent<MovingComponent>(entityId);
-                        moving->_speed.x *= bouncing->_bouncing;
+                        //moving->_speed.x *= bouncing->_bouncing; TODO: add horizontal bouncing
                         moving->_speed.y *= -bouncing->_bouncing;
                     }
                 }
@@ -673,7 +676,7 @@ public:
                         {
                             position->setPosition (position->getPosition().x, position->getPosition().y + distanceHighWall * (1 + bouncing->_bouncing));
                             MovingComponent* moving = componentManager.GetComponent<MovingComponent>(entityId);
-                            moving->_speed.x *= bouncing->_bouncing;
+                            //moving->_speed.x *= bouncing->_bouncing;
                             moving->_speed.y *= -bouncing->_bouncing;
                         }
                     }
@@ -684,8 +687,6 @@ public:
 
                 
             }
-
-            eventManager.EventHandled(eventId, *this);
 
         }
 
@@ -706,7 +707,7 @@ class HealthSystem: public System<HealthSystem>, public IEventListener //EntityH
         health->_hp -= 1;
         _LOG("Player hurt: hp is %d\n", health->_hp);
 
-        assert (health->_hp >= 0);
+        //assert (health->_hp >= 0);
 
         if (health->_hp == 0)
         {
@@ -838,7 +839,7 @@ public:
 
             else if (event->_eventTypeId == Event<PausedOrResumed>::EVENT_TYPE_ID)
             {
-                this->_onPause ^= 1;
+                if (this->_onGame) this->_onPause ^= 1;
             }
 
             else if (event->_eventTypeId == Event<EnterPressed>::EVENT_TYPE_ID)
